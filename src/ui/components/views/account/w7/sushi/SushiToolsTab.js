@@ -32,7 +32,7 @@ export function SushiToolsTab() {
             const config = await fetchConfig();
             const saved = config.cheatConfig.w7.sushitools;
             for (const [key, value] of Object.entries(settings)) {
-                value.val = key === "mergeDelayMs" ? (saved.mergeDelayMs ?? saved.actionDelayMs ?? 0) : saved[key];
+                value.val = key === "mergeDelayMs" ? (saved[key] ?? 0) : saved[key];
             }
             state.val = await command("status");
             settingsLoaded.val = true;

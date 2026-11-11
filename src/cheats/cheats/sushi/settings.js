@@ -3,7 +3,7 @@ import { sushiTools } from "./station.js";
 
 export function readSushiSettings() {
     const saved = cheatConfig.w7.sushitools;
-    const settings = { ...saved, mergeDelayMs: saved.mergeDelayMs ?? saved.actionDelayMs ?? 0 };
+    const settings = { ...saved, mergeDelayMs: saved.mergeDelayMs ?? 0 };
     const { tier, targetCount, targetTier, reserveSlots, extendChain, higherTier, mergeDelayMs } = settings;
     const { maxTier, maxPurchaseTier } = sushiTools("settings");
     if (
