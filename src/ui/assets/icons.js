@@ -271,6 +271,21 @@ export const Icons = {
     Check: (props) =>
         SvgBase(polyline({ points: "20 6 9 17 4 12" }), { "stroke-width": "2", "aria-hidden": "true", ...props }),
 
+    Lock: (props) =>
+        SvgBase(
+            [rect({ x: "3", y: "11", width: "18", height: "11", rx: "2" }), path({ d: "M7 11V7a5 5 0 0 1 10 0v4" })],
+            { "aria-hidden": "true", ...props }
+        ),
+
+    Unlock: (props) =>
+        SvgBase(
+            [
+                rect({ x: "3", y: "11", width: "18", height: "11", rx: "2" }),
+                path({ d: "M7 11V7a5 5 0 0 1 9.9-1M20 11V8" }),
+            ],
+            { "aria-hidden": "true", ...props }
+        ),
+
     Bell: (props) =>
         SvgBase(
             [path({ d: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" }), path({ d: "M13.73 21a2 2 0 0 1-3.46 0" })],

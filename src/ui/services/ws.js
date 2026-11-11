@@ -20,7 +20,7 @@ let stateUpdateHandler = null;
 /** @type {Function|null} */
 let monitorUpdateHandler = null;
 
-/** @type {Map<string, string>} */
+/** @type {Map<string, { path: string, staticEnabled: boolean }>} */
 const desiredMonitorSubscriptions = new Map();
 
 /** Reconnect interval in milliseconds (same as heartbeat) */
@@ -84,8 +84,8 @@ function connect() {
             isConnected = true;
             console.log("[WebSocket] Connected to server");
 
-            for (const [id, path] of desiredMonitorSubscriptions.entries()) {
-                ws.send(JSON.stringify({ type: "monitor-subscribe", id, path }));
+            for (const [id, subscription] of desiredMonitorSubscriptions.entries()) {
+                ws.send(JSON.stringify({ type: "monitor-subscribe", id, ...subscription }));
             }
         };
 
@@ -136,11 +136,11 @@ export function onMonitorUpdate(handler) {
  * @param {string} id
  * @param {string} path
  */
-export function sendMonitorSubscribe(id, path) {
-    desiredMonitorSubscriptions.set(id, path);
+export function sendMonitorSubscribe(id, path, staticEnabled = false) {
+    desiredMonitorSubscriptions.set(id, { path, staticEnabled });
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "monitor-subscribe", id, path }));
+        ws.send(JSON.stringify({ type: "monitor-subscribe", id, path, staticEnabled }));
     }
 }
 

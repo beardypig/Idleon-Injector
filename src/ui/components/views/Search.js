@@ -163,8 +163,12 @@ export const Search = () => {
     });
 
     van.derive(() => {
+        const subscriptions = ui.savedResults.filter(
+            (entry) => entry?.path && (entry.monitorEnabled !== false || entry.staticEnabled === true)
+        );
         store.monitors.reconcile(
-            ui.savedResults.filter((entry) => entry?.path && entry.monitorEnabled !== false).map((entry) => entry.path)
+            subscriptions.map((entry) => entry.path),
+            subscriptions.filter((entry) => entry.staticEnabled === true).map((entry) => entry.path)
         );
     });
 
@@ -312,6 +316,7 @@ export const Search = () => {
                 type: result.type,
                 lastHistory: seededHistory,
                 monitorEnabled: true,
+                staticEnabled: false,
             };
 
             ui.savedResults = [...ui.savedResults, entry];
@@ -345,14 +350,34 @@ export const Search = () => {
                 return nextEntry;
             });
 
+            const updated = ui.savedResults.find((entry) => entry.path === path);
+            if (enabled || updated?.staticEnabled) {
+                store.monitors.subscribe(path, updated?.staticEnabled === true);
+            } else {
+                store.monitors.unsubscribe(path);
+            }
+
             if (enabled) {
-                store.monitors.subscribe(path);
                 store.notify("Enabled watcher for " + path);
                 return;
             }
 
-            store.monitors.unsubscribe(path);
             store.notify("Stopped watcher for " + path);
+        },
+
+        toggleSavedStatic: (path, enabled) => {
+            ui.savedResults = ui.savedResults.map((entry) =>
+                entry.path === path ? { ...entry, staticEnabled: enabled } : entry
+            );
+
+            const updated = ui.savedResults.find((entry) => entry.path === path);
+            if (enabled || updated?.monitorEnabled !== false) {
+                store.monitors.subscribe(path, enabled);
+            } else {
+                store.monitors.unsubscribe(path);
+            }
+
+            store.notify(enabled ? `Holding ${path} at its current value` : `Released ${path}`);
         },
 
         removeSavedResult: (path) => {

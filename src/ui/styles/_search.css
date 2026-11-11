@@ -512,6 +512,17 @@
     background: rgba(204, 255, 0, 0.12);
 }
 
+.result-action-btn.static-btn.active {
+    opacity: 1;
+    color: var(--c-warning);
+    background: rgba(255, 196, 0, 0.12);
+}
+
+.result-action-btn.static-btn.error {
+    opacity: 1;
+    color: var(--c-danger);
+}
+
 .saved-result-item {
     height: auto;
     min-height: 56px;
@@ -526,6 +537,10 @@
 
 .saved-result-item.monitor-enabled:not(.monitored) {
     border-color: rgba(204, 255, 0, 0.2);
+}
+
+.saved-result-item.static-enabled:not(.monitored) {
+    border-color: rgba(255, 196, 0, 0.35);
 }
 
 .saved-result-item .result-path {

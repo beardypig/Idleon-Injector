@@ -67,6 +67,16 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         return count;
     }
 
+    function countStaticSubscribers(id) {
+        let count = 0;
+        for (const monitorMap of clientMonitorState.values()) {
+            for (const [monitorId, entry] of monitorMap.entries()) {
+                if (monitorId === id && entry.staticEnabled) count += 1;
+            }
+        }
+        return count;
+    }
+
     function clearMonitorSubscribeRetry(client, id) {
         const retryMap = monitorSubscribeRetryTimers.get(client);
         if (!retryMap) return;
@@ -116,8 +126,9 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
             }
 
             const monitorMap = clientMonitorState.get(client);
-            if (!monitorMap || !monitorMap.has(id)) return;
-            void handleMonitorSubscribe(client, path, retryAttempt + 1, true);
+            const entry = monitorMap?.get(id);
+            if (!entry) return;
+            void handleMonitorSubscribe(client, path, entry.staticEnabled, retryAttempt + 1, true);
         }, MONITOR_SUBSCRIBE_RETRY_DELAY_MS);
 
         retryMap.set(id, timer);
@@ -153,7 +164,13 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         const data = {};
 
         for (const [id, entry] of monitorMap.entries()) {
-            data[id] = { path: entry.path, history: entry.history, error: entry.error || null };
+            data[id] = {
+                path: entry.path,
+                history: entry.history,
+                error: entry.error || null,
+                staticEnabled: !!entry.staticEnabled,
+                staticError: entry.staticError || (entry.staticEnabled ? entry.error : null) || null,
+            };
         }
 
         sendState(client, data);
@@ -229,6 +246,38 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         await watcher.releasePromise;
     }
 
+    async function syncGlobalStaticState(path) {
+        const watcher = globalWatchersByPath.get(path);
+        if (!watcher || !gameBridge) return;
+        if (watcher.staticSyncPromise) {
+            await watcher.staticSyncPromise;
+            return syncGlobalStaticState(path);
+        }
+
+        const shouldFreeze = countStaticSubscribers(watcher.id) > 0;
+        if (watcher.staticEnabled === shouldFreeze) return;
+
+        watcher.staticSyncPromise = (async () => {
+            const helper = shouldFreeze ? "window.monitorFreeze" : "window.monitorUnfreeze";
+            const result = await gameBridge.callHelper(helper, [watcher.id]);
+            if (result.error) throw new Error(result.error.text || "Could not change static value state");
+            const payload = result.value;
+            if (!payload?.success) throw new Error(payload?.error || "Could not change static value state");
+            watcher.staticEnabled = shouldFreeze;
+            watcher.staticError = null;
+        })();
+
+        try {
+            await watcher.staticSyncPromise;
+        } catch (err) {
+            watcher.staticError = err.message;
+            log.error(`Could not update static value for ${path}: ${err.message}`);
+            throw err;
+        } finally {
+            watcher.staticSyncPromise = null;
+        }
+    }
+
     async function cleanupClientSubscriptions(client) {
         clearAllMonitorSubscribeRetries(client);
 
@@ -249,6 +298,11 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         }
 
         for (const path of paths) {
+            try {
+                await syncGlobalStaticState(path);
+            } catch {
+                // Unwrapping the last watcher still restores the current property value.
+            }
             await releaseGlobalWatcher(path);
         }
     }
@@ -286,7 +340,7 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
 
         for (const [client, monitorMap] of clientMonitorState.entries()) {
             for (const entry of monitorMap.values()) {
-                void handleMonitorSubscribe(client, entry.path, 0, true);
+                void handleMonitorSubscribe(client, entry.path, entry.staticEnabled, 0, true);
             }
         }
     }
@@ -316,11 +370,11 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
 
         const payload = result.value;
         if (payload && payload.success) {
-            globalWatchersByPath.set(path, { id });
+            globalWatchersByPath.set(path, { id, staticEnabled: false });
             return { ok: true, value: payload.value };
         }
         if (payload && payload.error === "Already watching this ID") {
-            globalWatchersByPath.set(path, { id });
+            globalWatchersByPath.set(path, { id, staticEnabled: false });
             return { ok: true };
         }
 
@@ -333,10 +387,11 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
      * Uses per-client monitor lists and shared global runtime hooks.
      * @param {object} client
      * @param {string} path
+     * @param {boolean} [staticEnabled]
      * @param {number} [retryAttempt]
      * @param {boolean} [forceAttempt] - Re-run the wrap even if a client entry already exists
      */
-    async function handleMonitorSubscribe(client, path, retryAttempt = 0, forceAttempt = false) {
+    async function handleMonitorSubscribe(client, path, staticEnabled = false, retryAttempt = 0, forceAttempt = false) {
         if (!gameBridge) return;
         if (typeof path !== "string" || !path.trim()) return;
 
@@ -345,14 +400,14 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         const monitorMap = getClientMonitorMap(client);
         const existing = monitorMap.get(id);
 
-        if (existing && !existing.error && !forceAttempt) {
+        if (existing && !existing.error && existing.staticEnabled === staticEnabled && !forceAttempt) {
             sendMonitorStateToClient(client);
             return;
         }
 
         // Optimistic entry (history preserved on rewrap): it also catches wrap()'s
         // initial broadcast, which can arrive before the evaluate below resolves.
-        const entry = { path: normalizedPath, history: existing ? existing.history : [] };
+        const entry = { path: normalizedPath, history: existing ? existing.history : [], staticEnabled };
         monitorMap.set(id, entry);
 
         try {
@@ -384,6 +439,11 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
                     await seedClientCurrentValue(client, id, normalizedPath, entry);
                     if (clientMonitorState.get(client)?.get(id) !== entry) return;
                 }
+            }
+            try {
+                await syncGlobalStaticState(normalizedPath);
+            } catch (err) {
+                entry.staticError = err.message;
             }
             sendMonitorStateToClient(client);
         } catch (err) {
@@ -430,6 +490,11 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
         sendMonitorStateToClient(client);
 
         if (entry && entry.path) {
+            try {
+                await syncGlobalStaticState(entry.path);
+            } catch {
+                // Releasing the last watcher restores the current property value.
+            }
             await releaseGlobalWatcher(entry.path);
         }
     }
@@ -467,7 +532,7 @@ function createMonitor({ gameBridge, sendState, clock = { setTimeout, clearTimeo
 
     return {
         sendState: sendMonitorStateToClient,
-        subscribe: (client, path) => handleMonitorSubscribe(client, path),
+        subscribe: (client, path, staticEnabled = false) => handleMonitorSubscribe(client, path, staticEnabled),
         unsubscribe: handleMonitorUnsubscribe,
         disconnect: cleanupClientSubscriptions,
         update: handleMonitorUpdate,

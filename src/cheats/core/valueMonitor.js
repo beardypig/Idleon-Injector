@@ -60,6 +60,7 @@ class ValueMonitor {
         const hasOriginalAccessor = original && (original.get || original.set);
         let storedValue = hasOriginalAccessor ? undefined : target[prop];
         const getStoredValue = () => storedValue;
+        const watcher = { target, prop, original, path, getStoredValue, frozen: false, frozenValue: undefined };
 
         const self = this;
         Object.defineProperty(target, prop, {
@@ -72,7 +73,13 @@ class ValueMonitor {
             set(newVal) {
                 let valueToReport;
 
-                if (hasOriginalAccessor) {
+                if (watcher.frozen && hasOriginalAccessor) {
+                    if (original.set) original.set.call(this, watcher.frozenValue);
+                    valueToReport = original.get ? original.get.call(this) : watcher.frozenValue;
+                } else if (watcher.frozen) {
+                    storedValue = watcher.frozenValue;
+                    valueToReport = storedValue;
+                } else if (hasOriginalAccessor) {
                     if (original.set) {
                         original.set.call(this, newVal);
                     }
@@ -89,7 +96,7 @@ class ValueMonitor {
             configurable: true,
         });
 
-        this.watchers.set(id, { target, prop, original, path, getStoredValue });
+        this.watchers.set(id, watcher);
         console.log(`[ValueMonitor] Now watching: ${path} (id: ${id})`);
 
         // Return the initial value instead of broadcasting it: the server seeds
@@ -98,6 +105,27 @@ class ValueMonitor {
         const initialValue = hasOriginalAccessor && original.get ? original.get.call(target) : storedValue;
 
         return { success: true, value: initialValue };
+    }
+
+    /** Keeps a watched value fixed at its current value until unfrozen. */
+    freeze(id) {
+        const watcher = this.watchers.get(id);
+        if (!watcher) return { error: "ID not found" };
+
+        const { target, prop, original } = watcher;
+        const hasOriginalAccessor = original && (original.get || original.set);
+        watcher.frozenValue = hasOriginalAccessor && original.get ? original.get.call(target) : target[prop];
+        watcher.frozen = true;
+        return { success: true, value: watcher.frozenValue };
+    }
+
+    /** Resumes normal writes to a watched value. */
+    unfreeze(id) {
+        const watcher = this.watchers.get(id);
+        if (!watcher) return { error: "ID not found" };
+        watcher.frozen = false;
+        watcher.frozenValue = undefined;
+        return { success: true };
     }
 
     /**

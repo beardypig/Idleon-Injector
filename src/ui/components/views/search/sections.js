@@ -547,11 +547,14 @@ const SavedResultItem = ({ entry: initialEntry, ui, handlers }) => {
 
     const monitorData = () => store.monitors.get(path);
     const isMonitorEnabled = () => entryState.val.monitorEnabled === true;
+    const isStaticEnabled = () => entryState.val.staticEnabled === true;
     const isMonitored = () => isMonitorEnabled() && !!monitorData();
     const monitorError = () => (isMonitorEnabled() ? monitorData()?.error || null : null);
-    const liveMonitorHistory = () => (isMonitorEnabled() ? getMonitorHistory(monitorData()) : []);
+    const staticError = () => (isStaticEnabled() ? monitorData()?.staticError || null : null);
+    const hasActiveFeed = () => isMonitorEnabled() || isStaticEnabled();
+    const liveMonitorHistory = () => (hasActiveFeed() ? getMonitorHistory(monitorData()) : []);
     const monitorHistory = () => {
-        if (!isMonitorEnabled()) return [];
+        if (!hasActiveFeed()) return [];
 
         const liveHistory = liveMonitorHistory();
         if (liveHistory.length > 0) return liveHistory;
@@ -564,8 +567,8 @@ const SavedResultItem = ({ entry: initialEntry, ui, handlers }) => {
         return entryState.val.formattedValue;
     };
     const liveStatusClass = () => {
-        if (!isMonitorEnabled()) return "live-paused";
-        if (monitorError()) return "live-error";
+        if (!hasActiveFeed()) return "live-paused";
+        if (monitorError() || staticError()) return "live-error";
         return hasLiveValue() ? "live-active" : "live-pending";
     };
 
@@ -578,8 +581,21 @@ const SavedResultItem = ({ entry: initialEntry, ui, handlers }) => {
         handlers.toggleSavedMonitor(path, !isMonitorEnabled());
     };
 
+    const handleStatic = (e) => {
+        e.stopPropagation();
+        if (e.currentTarget && typeof e.currentTarget.blur === "function") {
+            e.currentTarget.blur();
+        }
+
+        handlers.toggleSavedStatic(path, !isStaticEnabled());
+    };
+
     const handleStartEdit = (e) => {
         e.stopPropagation();
+        if (isStaticEnabled()) {
+            store.notify("Release the static value before editing it.", "error");
+            return;
+        }
         handlers.startSavedEdit(entryState.val);
     };
 
@@ -603,6 +619,7 @@ const SavedResultItem = ({ entry: initialEntry, ui, handlers }) => {
             class: () =>
                 "search-result-item saved-result-item " +
                 (isMonitorEnabled() ? "monitor-enabled " : "") +
+                (isStaticEnabled() ? "static-enabled " : "") +
                 (isMonitored() ? "monitored " : "") +
                 (copyFeedback.val === "success" ? "copied" : ""),
         },
@@ -711,6 +728,24 @@ const SavedResultItem = ({ entry: initialEntry, ui, handlers }) => {
                         onclick: handleMonitor,
                     },
                     Icons.Eye()
+                ),
+                button(
+                    {
+                        class: () =>
+                            "result-action-btn static-btn " +
+                            (isStaticEnabled() ? "active" : "") +
+                            (staticError() ? " error" : ""),
+                        title: () =>
+                            staticError()
+                                ? "Static failed: " + staticError()
+                                : isStaticEnabled()
+                                  ? "Release static value"
+                                  : "Keep current value static",
+                        "aria-label": () => (isStaticEnabled() ? "Unfreeze value" : "Keep value static"),
+                        "aria-pressed": isStaticEnabled,
+                        onclick: handleStatic,
+                    },
+                    () => (isStaticEnabled() ? Icons.Lock() : Icons.Unlock())
                 ),
                 button(
                     {

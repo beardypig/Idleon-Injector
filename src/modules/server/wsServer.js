@@ -93,7 +93,7 @@ async function handleMessage(ws, msg) {
             break;
 
         case "monitor-subscribe":
-            await monitors.subscribe(ws, msg.path);
+            await monitors.subscribe(ws, msg.path, msg.staticEnabled === true);
             break;
 
         case "monitor-unsubscribe":

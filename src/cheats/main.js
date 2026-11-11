@@ -91,6 +91,8 @@ window.writeGamePaths = writePaths;
 window.monitorWrap = (id, path) => monitor.wrap(id, path);
 window.monitorUnwrap = (id) => monitor.unwrap(id);
 window.monitorUnwrapAll = () => monitor.unwrapAll();
+window.monitorFreeze = (id) => monitor.freeze(id);
+window.monitorUnfreeze = (id) => monitor.unfreeze(id);
 window.monitorList = () => monitor.list();
 
 // State objects

@@ -44,6 +44,7 @@ export function normalizeSavedEntry(entry) {
         formattedValue: typeof entry.formattedValue === "string" ? entry.formattedValue : "",
         type: typeof entry.type === "string" ? entry.type : "undefined",
         monitorEnabled: entry.monitorEnabled !== false,
+        staticEnabled: entry.staticEnabled === true,
     };
 
     if (Object.prototype.hasOwnProperty.call(entry, "value")) {
