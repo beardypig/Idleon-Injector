@@ -17,6 +17,7 @@ export function SushiToolsTab() {
         targetCount: van.state(""),
         targetTier: van.state(""),
         reserveSlots: van.state(""),
+        actionDelayMs: van.state("0"),
         extendChain: van.state(false),
         higherTier: van.state(false),
         ingameButtons: van.state(false),
@@ -30,7 +31,8 @@ export function SushiToolsTab() {
         try {
             const config = await fetchConfig();
             const saved = config.cheatConfig.w7.sushitools;
-            for (const [key, value] of Object.entries(settings)) value.val = saved[key];
+            for (const [key, value] of Object.entries(settings))
+                value.val = key === "actionDelayMs" ? (saved[key] ?? 0) : saved[key];
             state.val = await command("status");
             settingsLoaded.val = true;
             enabled.val = state.val.enabled;
@@ -48,6 +50,9 @@ export function SushiToolsTab() {
                 throw new Error("Enter whole numbers for tiers, quantity and empty slots.");
             draft[key] = Number(draft[key]);
         }
+        if (String(draft.actionDelayMs).trim() === "" || !Number.isInteger(Number(draft.actionDelayMs)))
+            throw new Error("Enter a whole-number action delay in milliseconds.");
+        draft.actionDelayMs = Number(draft.actionDelayMs);
         if (
             draft.tier < 1 ||
             draft.tier > state.val.maxPurchaseTier ||
@@ -56,9 +61,11 @@ export function SushiToolsTab() {
             draft.targetCount < 1 ||
             draft.targetCount > 120 ||
             draft.reserveSlots < 0 ||
-            draft.reserveSlots > 119
+            draft.reserveSlots > 119 ||
+            draft.actionDelayMs < 0 ||
+            draft.actionDelayMs > 5000
         )
-            throw new Error("Choose valid tiers, 1–120 target sushi and 0–119 empty slots.");
+            throw new Error("Choose valid tiers, 1–120 target sushi, 0–119 empty slots and 0–5000 ms action delay.");
         const result = await updateSessionConfig({ cheatConfig: { w7: { sushitools: draft } } });
         // Saving rewrites all overrides, so read the complete current config first.
         const config = await fetchConfig();
@@ -99,7 +106,7 @@ export function SushiToolsTab() {
         }
     }
     const locked = () => enabled.val || pending.val || !settingsLoaded.val;
-    const numberField = (title, value, min = 1) =>
+    const numberField = (title, value, min = 1, max) =>
         label(
             { class: "sushi-setting" },
             span({ class: "sushi-setting__title" }, title),
@@ -107,6 +114,7 @@ export function SushiToolsTab() {
                 "aria-label": title,
                 type: "number",
                 min,
+                ...(max === undefined ? {} : { max }),
                 step: 1,
                 value,
                 disabled: locked,
@@ -143,10 +151,7 @@ export function SushiToolsTab() {
                         div(
                             { class: "sushi-settings-section" },
                             h3("PURCHASE"),
-                            div(
-                                { class: "sushi-settings-grid" },
-                                numberField("Purchase tier", settings.tier)
-                            )
+                            div({ class: "sushi-settings-grid" }, numberField("Purchase tier", settings.tier))
                         ),
                         div(
                             { class: "sushi-settings-section" },
@@ -156,6 +161,18 @@ export function SushiToolsTab() {
                                 numberField("Target tier", settings.targetTier),
                                 numberField("Target quantity", settings.targetCount),
                                 numberField("Empty slots", settings.reserveSlots, 0)
+                            )
+                        ),
+                        div(
+                            { class: "sushi-settings-section" },
+                            h3("PACE"),
+                            div(
+                                { class: "sushi-settings-grid" },
+                                numberField("Delay between moves (ms)", settings.actionDelayMs, 0, 5000)
+                            ),
+                            p(
+                                { class: "sushi-setting__help" },
+                                "0 uses the current speed. Delay is added before each purchase or merge."
                             )
                         ),
                         div(
