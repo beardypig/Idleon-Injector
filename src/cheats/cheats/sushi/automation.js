@@ -41,8 +41,6 @@ async function settle() {
 const refill = async (state) => {
     const options = session.options;
     while (enabled && state.capped < options.targetCount && state.working.some((index) => state.board[index] < 0)) {
-        if (options.actionDelayMs > 0) await sleep(options.actionDelayMs);
-        if (!enabled) return null;
         message = `Buying tier ${options.tier} sushi. Capped: ${state.capped}/${options.targetCount}.`;
         const result = call("buy", { board: state.board, plates: state.plates, purchaseTier: options.tier });
         if (!result.bought) break;
@@ -83,7 +81,7 @@ const playLoop = async () => {
             continue;
         }
         if (plan.tier >= state.targetTier) throw new Error("Capped sushi cannot be merged.");
-        if (options.actionDelayMs > 0) await sleep(options.actionDelayMs);
+        if (options.mergeDelayMs > 0) await sleep(options.mergeDelayMs);
         if (!enabled) return;
         message = `Merging tier ${plan.tier + 1} with ${plan.tail.length} planned Wind upgrades.`;
         call("merge", plan);
